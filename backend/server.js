@@ -4,9 +4,33 @@ import dotenv from 'dotenv';
 // Load environment variables FIRST before any other imports
 dotenv.config();
 console.log('Environment variables loaded');
-console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME ? 'Set' : 'NOT SET');
-console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? 'Set' : 'NOT SET');
-console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? 'Set' : 'NOT SET');
+
+// Validate critical environment variables
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingRequired = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingRequired.length > 0) {
+  console.error('❌ CRITICAL ERROR: Missing required environment variables:');
+  missingRequired.forEach(varName => console.error(`   - ${varName}`));
+  console.error('Please configure these in your .env file or deployment environment.');
+  process.exit(1);
+}
+
+// Log recommended service configuration
+const recommendedEnvVars = [
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+  'EMAIL_USER',
+  'EMAIL_PASS'
+];
+const missingRecommended = recommendedEnvVars.filter(varName => !process.env[varName]);
+if (missingRecommended.length > 0) {
+  console.warn('⚠️ WARNING: Missing recommended environment variables (some features may fail):');
+  missingRecommended.forEach(varName => console.warn(`   - ${varName}`));
+} else {
+  console.log('✅ All recommended service environment variables are configured.');
+}
 
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -69,7 +93,11 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/friends', friendRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Health check
+// Health checks
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Server is healthy' });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
 });

@@ -1,6 +1,6 @@
 import Group from '../models/Group.js';
 import Message from '../models/Message.js';
-import cloudinary from '../config/cloudinary.js';
+import cloudinary, { isCloudinaryConfigured } from '../config/cloudinary.js';
 
 // @desc    Create group
 // @route   POST /api/groups
@@ -147,6 +147,13 @@ export const uploadGroupAvatar = async (req, res) => {
 
     if (!group) {
       return res.status(404).json({ message: 'Group not found' });
+    }
+
+    if (!isCloudinaryConfigured()) {
+      return res.status(503).json({
+        message:
+          'Image upload is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend/.env',
+      });
     }
 
     // Check if user is admin
