@@ -8,22 +8,22 @@ const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;
 const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
-console.log(
-  "Cloudinary Config - Cloud Name:",
-  cloudName ? "***" : "MISSING"
-);
-console.log(
-  "Cloudinary Config - API Key:",
-  apiKey ? "***" : "MISSING"
-);
-console.log(
-  "Cloudinary Config - API Secret:",
-  apiSecret ? "***" : "MISSING"
-);
+const hasSomeConfig = cloudName || apiKey || apiSecret;
+const hasAllConfig = cloudName && apiKey && apiSecret;
 
-if (!cloudName || !apiKey || !apiSecret) {
+if (hasSomeConfig && !hasAllConfig) {
+  const missing = [];
+  if (!cloudName) missing.push('CLOUDINARY_CLOUD_NAME');
+  if (!apiKey) missing.push('CLOUDINARY_API_KEY');
+  if (!apiSecret) missing.push('CLOUDINARY_API_SECRET');
   console.error(
-    "Cloudinary environment variables are missing. Check your .env file."
+    `❌ Cloudinary is partially configured. Missing variables: ${missing.join(', ')}`
+  );
+}
+
+if (!hasAllConfig) {
+  console.warn(
+    "⚠️ Cloudinary is not configured. Avatar and media upload features will be disabled."
   );
 } else {
   cloudinary.config({
@@ -33,11 +33,11 @@ if (!cloudName || !apiKey || !apiSecret) {
     secure: true,
   });
 
-  console.log("Cloudinary initialized successfully");
+  console.log("✅ Cloudinary initialized successfully");
 }
 
 export const isCloudinaryConfigured = () => {
-  return !!(cloudName && apiKey && apiSecret);
+  return !!hasAllConfig;
 };
 
 export default cloudinary;

@@ -5,31 +5,60 @@ import dotenv from 'dotenv';
 dotenv.config();
 console.log('Environment variables loaded');
 
-// Validate critical environment variables
-const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
-const missingRequired = requiredEnvVars.filter(varName => !process.env[varName]);
+// Global Uncaught Exception Handler
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION! Shutting down server...');
+  console.error(err.name, err.message);
+  console.error(err.stack);
+  process.exit(1);
+});
 
-if (missingRequired.length > 0) {
-  console.error('❌ CRITICAL ERROR: Missing required environment variables:');
-  missingRequired.forEach(varName => console.error(`   - ${varName}`));
+// Validate environment variables on startup
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Critical environment variables required to boot up
+const criticalEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingCritical = criticalEnvVars.filter(varName => !process.env[varName]);
+
+if (missingCritical.length > 0) {
+  console.error('❌ CRITICAL ERROR: Missing critical environment variables:');
+  missingCritical.forEach(varName => console.error(`   - ${varName}`));
   console.error('Please configure these in your .env file or deployment environment.');
   process.exit(1);
 }
 
-// Log recommended service configuration
-const recommendedEnvVars = [
+// Complete set of production-required environment variables
+const productionRequiredEnvVars = [
+  'PORT',
+  'NODE_ENV',
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'JWT_EXPIRE',
+  'EMAIL_USER',
+  'EMAIL_PASS',
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
   'CLOUDINARY_API_SECRET',
-  'EMAIL_USER',
-  'EMAIL_PASS'
+  'FRONTEND_URL'
 ];
-const missingRecommended = recommendedEnvVars.filter(varName => !process.env[varName]);
-if (missingRecommended.length > 0) {
-  console.warn('⚠️ WARNING: Missing recommended environment variables (some features may fail):');
-  missingRecommended.forEach(varName => console.warn(`   - ${varName}`));
+
+const missingProduction = productionRequiredEnvVars.filter(varName => !process.env[varName]);
+
+if (isProduction) {
+  if (missingProduction.length > 0) {
+    console.error('❌ CRITICAL PRODUCTION ERROR: Missing required environment variables for production:');
+    missingProduction.forEach(varName => console.error(`   - ${varName}`));
+    console.error('Application deployment failed due to missing environment configuration.');
+    process.exit(1);
+  }
+  console.log('✅ All production environment variables are successfully configured.');
 } else {
-  console.log('✅ All recommended service environment variables are configured.');
+  if (missingProduction.length > 0) {
+    console.warn('⚠️ WARNING: Missing recommended environment variables for development:');
+    missingProduction.forEach(varName => console.warn(`   - ${varName}`));
+  } else {
+    console.log('✅ All environment variables are configured.');
+  }
 }
 
 import cors from 'cors';
@@ -58,17 +87,21 @@ import { errorHandler } from './middleware/errorMiddleware.js';
 const app = express();
 const httpServer = createServer(app);
 
+const allowedCorsOrigins = isProduction
+  ? process.env.FRONTEND_URL
+  : (process.env.FRONTEND_URL || 'http://localhost:3000');
+
 // Initialize Socket.IO
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: allowedCorsOrigins,
     credentials: true,
   },
 });
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: allowedCorsOrigins,
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -132,5 +165,54 @@ httpServer.on('error', (error) => {
 
 httpServer.listen(PORT, () => {
   console.log(`Server running in ${NODE_ENV} mode on port ${PORT}`);
-  console.log(`Frontend origin allowed: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  console.log(`Frontend origin allowed: ${allowedCorsOrigins}`);
 });
+
+// Global Unhandled Rejection Handler
+process.on('unhandledRejection', (err) => {
+  console.error('❌ UNHANDLED REJECTION! Shutting down server gracefully...');
+  console.error(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+  if (err instanceof Error && err.stack) {
+    console.error(err.stack);
+  }
+  
+  // Close HTTP server and then exit
+  httpServer.close(() => {
+    console.log('🚪 Server process exiting due to unhandled rejection.');
+    process.exit(1);
+  });
+
+  // Force exit after 3 seconds if closing takes too long
+  setTimeout(() => {
+    console.error('❌ Forced exit due to unhandled rejection timeout.');
+    process.exit(1);
+  }, 3000);
+});
+
+// Graceful Shutdown Handler
+const gracefulShutdown = (signal) => {
+  console.log(`🔌 ${signal} signal received. Starting graceful shutdown...`);
+  
+  httpServer.close(async () => {
+    console.log('🚪 HTTP server closed.');
+    
+    try {
+      const mongoose = await import('mongoose');
+      await mongoose.default.connection.close();
+      console.log('📦 Database connection closed successfully.');
+      process.exit(0);
+    } catch (dbError) {
+      console.error('❌ Error closing database connection:', dbError);
+      process.exit(1);
+    }
+  });
+
+  // Force shutdown after 10s if graceful shutdown hangs
+  setTimeout(() => {
+    console.error('❌ Forced shutdown due to shutdown timeout.');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

@@ -3,12 +3,25 @@ import nodemailer from 'nodemailer';
 const sendEmail = async (options) => {
   try {
     console.log('📧 Attempting to send email to:', options.email);
-    console.log('📧 Using email account:', process.env.EMAIL_USER);
 
     // Validate email configuration
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      throw new Error('Email configuration missing. Please set EMAIL_USER and EMAIL_PASS in .env file');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Email configuration missing. Please configure EMAIL_USER and EMAIL_PASS in production environment variables.');
+      } else {
+        console.warn('⚠️ WARNING: EMAIL_USER or EMAIL_PASS environment variables are missing.');
+        console.warn('⚠️ Server is running in development: mocking email transmission.');
+        console.log(`📬 [MOCK EMAIL SENT] to: ${options.email}`);
+        console.log(`📬 [MOCK EMAIL SUBJECT] subject: ${options.subject}`);
+        return {
+          success: true,
+          mocked: true,
+          messageId: 'mock-message-id-development'
+        };
+      }
     }
+
+    console.log('📧 Using email account:', process.env.EMAIL_USER);
 
     // Create transporter with Gmail SMTP
     const transporter = nodemailer.createTransport({

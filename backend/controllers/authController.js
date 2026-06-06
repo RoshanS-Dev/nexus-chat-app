@@ -62,7 +62,9 @@ export const register = async (req, res) => {
     const otp = user.generateOTP();
     await user.save();
 
-    console.log('🔐 Generated OTP for user:', user.email, '| OTP:', otp);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔐 Generated OTP for user:', user.email, '| OTP:', otp);
+    }
 
     // Send OTP email
     try {
@@ -265,7 +267,9 @@ export const forgotPassword = async (req, res) => {
     const otp = user.generateOTP();
     await user.save();
 
-    console.log('🔐 Generated password reset OTP for:', user.email, '| OTP:', otp);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔐 Generated password reset OTP for:', user.email, '| OTP:', otp);
+    }
 
     // Send OTP email
     try {
@@ -406,7 +410,9 @@ export const resendOTP = async (req, res) => {
     const otp = user.generateOTP();
     await user.save();
 
-    console.log('🔐 Resending OTP for user:', user.email, '| OTP:', otp);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔐 Resending OTP for user:', user.email, '| OTP:', otp);
+    }
 
     // Send OTP email
     try {
