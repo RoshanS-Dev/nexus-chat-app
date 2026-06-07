@@ -87,29 +87,39 @@ import { errorHandler } from './middleware/errorMiddleware.js';
 const app = express();
 const httpServer = createServer(app);
 
-const allowedCorsOrigins = isProduction
-  ? process.env.FRONTEND_URL
-  : (process.env.FRONTEND_URL || 'http://localhost:3000');
+// Parse CORS origins — supports comma-separated list for multiple frontends
+const parseCorsOrigins = () => {
+  const raw = process.env.FRONTEND_URL || (isProduction ? '' : 'http://localhost:3000');
+  const origins = raw.split(',').map(o => o.trim()).filter(Boolean);
+  return origins.length === 1 ? origins[0] : origins;
+};
 
-// Initialize Socket.IO
+const allowedCorsOrigins = parseCorsOrigins();
+
+// Initialize Socket.IO with production-safe settings
 const io = new Server(httpServer, {
   cors: {
     origin: allowedCorsOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  transports: ['websocket', 'polling'],
 });
 
 // Middleware
 app.use(cors({
   origin: allowedCorsOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
-// Connect to Database
-connectDB();
+// Connect to Database (await so server doesn't accept traffic before DB is ready)
+await connectDB();
 
 // Initialize Socket.IO handlers
 initializeSocket(io);
@@ -139,7 +149,7 @@ app.get('/api/health', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-const PORT = parseInt(process.env.PORT, 10) || 5000;
+const PORT = parseInt(process.env.PORT, 10) || 10000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 httpServer.on('error', (error) => {

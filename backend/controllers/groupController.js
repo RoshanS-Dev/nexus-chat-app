@@ -544,7 +544,7 @@ export const regenerateInviteCode = async (req, res) => {
     let newCode;
     let exists = true;
     while (exists) {
-      newCode = require('crypto').randomBytes(8).toString('hex');
+      newCode = crypto.randomBytes(8).toString('hex');
       exists = await Group.findOne({ inviteCode: newCode });
     }
 
