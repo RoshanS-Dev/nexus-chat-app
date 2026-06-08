@@ -20,7 +20,7 @@ const messageSchema = new mongoose.Schema({
   },
   messageType: {
     type: String,
-    enum: ['text', 'image', 'video', 'audio', 'document'],
+    enum: ['text', 'image', 'video', 'audio', 'document', 'pdf'],
     default: 'text',
   },
   replyTo: {
@@ -31,10 +31,11 @@ const messageSchema = new mongoose.Schema({
     url: String,
     type: {
       type: String,
-      enum: ['image', 'video', 'audio', 'document', 'pdf'],
+      enum: ['image', 'video', 'audio', 'document', 'pdf', 'doc', 'xls', 'ppt', 'zip', 'txt'],
     },
     filename: String,
     duration: Number,
+    mimetype: String,
   }],
   reactions: [{
     user: {

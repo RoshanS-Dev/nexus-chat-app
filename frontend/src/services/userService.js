@@ -1,6 +1,44 @@
 import api from './api';
 
 export const userService = {
+  // Search users
+  searchUsers: async (query) => {
+    const response = await api.get(`/users/search?q=${encodeURIComponent(query)}`);
+    return response.data;
+  },
+
+  // Update profile
+  updateProfile: async (profileData) => {
+    const response = await api.put('/users/profile', profileData);
+    return response.data;
+  },
+
+  // Upload avatar
+  uploadAvatar: async (file, onProgress) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const response = await api.post('/users/upload-avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
+      },
+    });
+    return response.data;
+  },
+
+  // Upload cover image
+  uploadCover: async (file) => {
+    const formData = new FormData();
+    formData.append('coverImage', file);
+    const response = await api.post('/users/upload-cover', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
   // Archive chat
   archiveChat: async (chatId, chatType = 'user') => {
     const response = await api.post('/users/archive-chat', { chatId, chatType });

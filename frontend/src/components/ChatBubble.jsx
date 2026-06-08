@@ -1,9 +1,46 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, CheckCheck, Copy, Star, Reply, Trash2, Forward, Pin, BarChart3 } from 'lucide-react';
+import { Check, CheckCheck, Copy, Star, Reply, Trash2, Forward, Pin, BarChart3, Download, ExternalLink, FileText, FileSpreadsheet, FileIcon, FileArchive, File } from 'lucide-react';
 import PollMessage from './PollMessage';
 
 const REACTIONS = ['❤️', '👍', '😂', '🔥', '😮', '😢'];
+
+// Helper to get file extension from filename
+const getFileExtension = (filename) => {
+  if (!filename) return '';
+  return filename.split('.').pop()?.toLowerCase() || '';
+};
+
+// Get file icon component based on type/extension
+const getFileIcon = (attachment) => {
+  const ext = getFileExtension(attachment.filename);
+  const type = attachment.type;
+
+  if (type === 'pdf' || ext === 'pdf') return { icon: FileText, color: '#EF4444', bg: '#FEE2E2', label: 'PDF' };
+  if (type === 'doc' || ['doc', 'docx'].includes(ext)) return { icon: FileText, color: '#3B82F6', bg: '#DBEAFE', label: 'DOC' };
+  if (type === 'xls' || ['xls', 'xlsx', 'csv'].includes(ext)) return { icon: FileSpreadsheet, color: '#10B981', bg: '#D1FAE5', label: 'XLS' };
+  if (type === 'ppt' || ['ppt', 'pptx'].includes(ext)) return { icon: FileText, color: '#F59E0B', bg: '#FEF3C7', label: 'PPT' };
+  if (type === 'zip' || ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return { icon: FileArchive, color: '#8B5CF6', bg: '#EDE9FE', label: 'ZIP' };
+  if (type === 'txt' || ext === 'txt') return { icon: File, color: '#6B7280', bg: '#F3F4F6', label: 'TXT' };
+  return { icon: FileIcon, color: '#6B7280', bg: '#F3F4F6', label: ext.toUpperCase() || 'FILE' };
+};
+
+// Format file size (for future use)
+const formatFileName = (name, maxLen = 28) => {
+  if (!name) return 'File';
+  if (name.length <= maxLen) return name;
+  const ext = getFileExtension(name);
+  const base = name.slice(0, name.lastIndexOf('.'));
+  const truncated = base.slice(0, maxLen - ext.length - 4) + '...';
+  return `${truncated}.${ext}`;
+};
+
+// Check if text is just a raw URL (to suppress it when attachments exist)
+const isRawUrl = (text) => {
+  if (!text) return false;
+  const trimmed = text.trim();
+  return /^https?:\/\/\S+$/.test(trimmed);
+};
 
 // Highlight @mentions in text
 const highlightMentions = (text, isOwn) => {
@@ -11,7 +48,7 @@ const highlightMentions = (text, isOwn) => {
   const mentionRegex = /@(\w+)/g;
   const parts = text.split(mentionRegex);
   const textColorClass = isOwn ? 'text-white' : 'text-gray-900';
-  
+
   return parts.map((part, idx) => {
     if (idx % 2 === 1) {
       return (
@@ -117,40 +154,163 @@ const ChatBubble = ({
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
           onTouchCancel={handleTouchEnd}
-          className={`relative px-3 py-2 rounded-xl message-bubble shadow-sm ${
-            isOwn ? 'bg-nexus-primary text-white rounded-br-sm' : 'bg-white text-gray-900 rounded-bl-sm'
-          }`}
+          className={`relative px-3 py-2 rounded-xl message-bubble shadow-sm ${isOwn ? 'bg-nexus-primary text-white rounded-br-sm' : 'bg-white text-gray-900 rounded-bl-sm'
+            }`}
           onContextMenu={(e) => {
             e.preventDefault();
             setShowMenu(true);
           }}
         >
+          {/* Image attachment - preview card */}
           {attachment?.type === 'image' && (
-            <img src={attachment.url} alt="" className="rounded-lg max-w-full mb-1 max-h-60 object-cover" />
+            <div className="attachment-card attachment-card-image mb-1.5">
+              <a href={attachment.url} target="_blank" rel="noreferrer" className="block relative group/img">
+                <img
+                  src={attachment.url}
+                  alt={attachment.filename || 'Image'}
+                  className="rounded-lg max-w-full max-h-60 object-cover w-full"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
+                  <ExternalLink size={24} className="text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow-lg" />
+                </div>
+              </a>
+              {attachment.filename && (
+                <div className="flex items-center justify-between mt-1.5 px-0.5">
+                  <span className={`text-[11px] truncate max-w-[70%] ${isOwn ? 'text-white/70' : 'text-gray-500'}`}>
+                    {formatFileName(attachment.filename)}
+                  </span>
+                  <a
+                    href={attachment.url}
+                    download={attachment.filename}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`p-1 rounded-full transition-colors ${isOwn ? 'hover:bg-white/20 text-white/70 hover:text-white' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Download size={13} />
+                  </a>
+                </div>
+              )}
+            </div>
           )}
+
+          {/* Video attachment */}
           {attachment?.type === 'video' && (
-            <video src={attachment.url} controls className="rounded-lg max-w-full mb-1 max-h-60" />
+            <div className="attachment-card mb-1.5">
+              <video src={attachment.url} controls className="rounded-lg max-w-full max-h-60 w-full" />
+              {attachment.filename && (
+                <div className="flex items-center justify-between mt-1.5 px-0.5">
+                  <span className={`text-[11px] truncate max-w-[70%] ${isOwn ? 'text-white/70' : 'text-gray-500'}`}>
+                    {formatFileName(attachment.filename)}
+                  </span>
+                  <a
+                    href={attachment.url}
+                    download={attachment.filename}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`p-1 rounded-full transition-colors ${isOwn ? 'hover:bg-white/20 text-white/70 hover:text-white' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <Download size={13} />
+                  </a>
+                </div>
+              )}
+            </div>
           )}
+
+          {/* Audio attachment */}
           {attachment?.type === 'audio' && (
-            <audio src={attachment.url} controls className="w-full max-w-full min-w-0 mb-1" />
+            <div className="attachment-card mb-1.5">
+              <audio controls preload="auto" crossOrigin="anonymous" className="w-full max-w-full min-w-0">
+                <source src={attachment.url} type={attachment.mimetype || 'audio/webm'} />
+                Your browser does not support the audio element.
+              </audio>
+            </div>
           )}
-          {(attachment?.type === 'document' || attachment?.type === 'pdf') && (
-            <a
-              href={attachment.url}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 text-sm text-nexus-secondary underline mb-1"
-            >
-              📎 {attachment.filename || 'Download file'}
-            </a>
-          )}
+
+          {/* PDF attachment - special card */}
+          {attachment?.type === 'pdf' && (() => {
+            const fileInfo = getFileIcon(attachment);
+            const IconComp = fileInfo.icon;
+            return (
+              <div className={`attachment-card attachment-card-doc mb-1.5 rounded-lg overflow-hidden border ${isOwn ? 'border-white/20 bg-white/10' : 'border-gray-200 bg-gray-50'}`}>
+                <div className="flex items-center gap-3 p-3">
+                  <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: fileInfo.bg }}>
+                    <IconComp size={20} style={{ color: fileInfo.color }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${isOwn ? 'text-white' : 'text-gray-800'}`}>
+                      {formatFileName(attachment.filename || 'Document.pdf')}
+                    </p>
+                    <p className={`text-[11px] mt-0.5 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                      {fileInfo.label} Document
+                    </p>
+                  </div>
+                </div>
+                <div className={`flex border-t ${isOwn ? 'border-white/15' : 'border-gray-200'}`}>
+                  <a
+                    href={attachment.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${isOwn ? 'text-white/80 hover:bg-white/10 hover:text-white' : 'text-nexus-primary hover:bg-nexus-primary/5'}`}
+                  >
+                    <ExternalLink size={13} />
+                    Open
+                  </a>
+                  <div className={`w-px ${isOwn ? 'bg-white/15' : 'bg-gray-200'}`} />
+                  <a
+                    href={attachment.url}
+                    download={attachment.filename}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${isOwn ? 'text-white/80 hover:bg-white/10 hover:text-white' : 'text-nexus-primary hover:bg-nexus-primary/5'}`}
+                  >
+                    <Download size={13} />
+                    Download
+                  </a>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Generic document attachment card */}
+          {attachment && !['image', 'video', 'audio', 'pdf'].includes(attachment.type) && (() => {
+            const fileInfo = getFileIcon(attachment);
+            const IconComp = fileInfo.icon;
+            return (
+              <div className={`attachment-card attachment-card-doc mb-1.5 rounded-lg overflow-hidden border ${isOwn ? 'border-white/20 bg-white/10' : 'border-gray-200 bg-gray-50'}`}>
+                <div className="flex items-center gap-3 p-3">
+                  <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: fileInfo.bg }}>
+                    <IconComp size={20} style={{ color: fileInfo.color }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${isOwn ? 'text-white' : 'text-gray-800'}`}>
+                      {formatFileName(attachment.filename || 'File')}
+                    </p>
+                    <p className={`text-[11px] mt-0.5 ${isOwn ? 'text-white/60' : 'text-gray-400'}`}>
+                      {fileInfo.label} File
+                    </p>
+                  </div>
+                  <a
+                    href={attachment.url}
+                    download={attachment.filename}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`shrink-0 p-2 rounded-full transition-colors ${isOwn ? 'hover:bg-white/20 text-white/70 hover:text-white' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <Download size={16} />
+                  </a>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Poll Message */}
           {message.poll && message.poll.question ? (
             <PollMessage message={message} isGroup={isGroup} />
           ) : (
             <>
-              {message.text && (
+              {message.text && !isRawUrl(message.text) && (
                 <p className="text-sm break-words whitespace-pre-wrap">
                   {highlightMentions(message.text, isOwn)}
                   {message.edited && <span className="text-[10px] text-gray-400 ml-1">(edited)</span>}
@@ -220,62 +380,62 @@ const ChatBubble = ({
                 exit={{ opacity: 0, scale: 0.95 }}
                 className={`absolute z-40 right-2 top-full mt-1 max-h-[60vh] overflow-y-auto w-[min(220px,calc(100vw-2rem))] bg-white rounded-xl shadow-lg border border-gray-100 py-1`}
               >
-              {
-                // Build menu according to private/group and ownership
-                (() => {
-                  const items = [];
-                  // Reply
-                  items.push({ icon: Reply, label: 'Reply', action: () => onReply?.(message) });
-                  // Copy
-                  items.push({ icon: Copy, label: 'Copy', action: () => onCopy?.(message) });
-                  // Star
-                  items.push({ icon: Star, label: 'Star', action: () => onStar?.(message) });
-                  // Forward
-                  items.push({ icon: Forward, label: 'Forward', action: () => onForward?.(message) });
-                  // Edit (only if own)
-                  if (isOwn) items.push({ icon: Trash2, label: 'Edit', action: () => onEdit?.(message) });
-                  // Delete
-                  if (isOwn) {
-                    // private: offer delete for everyone
-                    if (!message.group && onDeleteEveryone) items.push({ icon: Trash2, label: 'Delete For Everyone', action: () => onDeleteEveryone?.(message) });
-                    // group or private: offer delete for me
-                    items.push({ icon: Trash2, label: 'Delete', action: () => onDeleteMe?.(message) });
-                  } else {
-                    // not own: offer delete for me
-                    items.push({ icon: Trash2, label: 'Delete', action: () => onDeleteMe?.(message) });
-                  }
+                {
+                  // Build menu according to private/group and ownership
+                  (() => {
+                    const items = [];
+                    // Reply
+                    items.push({ icon: Reply, label: 'Reply', action: () => onReply?.(message) });
+                    // Copy
+                    items.push({ icon: Copy, label: 'Copy', action: () => onCopy?.(message) });
+                    // Star
+                    items.push({ icon: Star, label: 'Star', action: () => onStar?.(message) });
+                    // Forward
+                    items.push({ icon: Forward, label: 'Forward', action: () => onForward?.(message) });
+                    // Edit (only if own)
+                    if (isOwn) items.push({ icon: Trash2, label: 'Edit', action: () => onEdit?.(message) });
+                    // Delete
+                    if (isOwn) {
+                      // private: offer delete for everyone
+                      if (!message.group && onDeleteEveryone) items.push({ icon: Trash2, label: 'Delete For Everyone', action: () => onDeleteEveryone?.(message) });
+                      // group or private: offer delete for me
+                      items.push({ icon: Trash2, label: 'Delete', action: () => onDeleteMe?.(message) });
+                    } else {
+                      // not own: offer delete for me
+                      items.push({ icon: Trash2, label: 'Delete', action: () => onDeleteMe?.(message) });
+                    }
 
-                  // Group specific extra
-                  if (message.group) {
-                    items.push({ icon: Pin, label: 'View Message Info', action: () => onViewInfo?.(message) });
-                  }
+                    // Group specific extra
+                    if (message.group) {
+                      items.push({ icon: Pin, label: 'View Message Info', action: () => onViewInfo?.(message) });
+                    }
 
-                  return items.map(({ icon: Icon, label, action }) => (
+                    return items.map(({ icon: Icon, label, action }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => { action(); setShowMenu(false); setShowReactions(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <Icon size={14} />
+                        {label}
+                      </button>
+                    ));
+                  })()
+                }
+                <div className="border-t border-gray-100 px-2 py-2 flex gap-1 flex-wrap">
+                  {REACTIONS.map((emoji) => (
                     <button
-                      key={label}
+                      key={emoji}
                       type="button"
-                      onClick={() => { action(); setShowMenu(false); setShowReactions(false); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      onClick={() => { onReact?.(message, emoji); setShowMenu(false); }}
+                      className="text-lg hover:scale-125 transition-transform"
                     >
-                      <Icon size={14} />
-                      {label}
+                      {emoji}
                     </button>
-                  ));
-                })()
-              }
-              <div className="border-t border-gray-100 px-2 py-2 flex gap-1 flex-wrap">
-                {REACTIONS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => { onReact?.(message, emoji); setShowMenu(false); }}
-                    className="text-lg hover:scale-125 transition-transform"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
+                  ))}
+                </div>
+              </motion.div>
             </>
           )}
         </AnimatePresence>

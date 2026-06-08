@@ -48,7 +48,7 @@ const ProfilePage = () => {
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error('Max 5MB'); return; }
+    if (file.size > 20 * 1024 * 1024) { toast.error('Max 20MB'); return; }
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
   };

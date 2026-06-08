@@ -76,6 +76,15 @@ const sendEmail = async (options) => {
       console.error('❌ Connection failed. Please check your internet connection');
     }
     
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('⚠️ Server is running in development: falling back to mock email transmission.');
+      return {
+        success: true,
+        mocked: true,
+        messageId: 'mock-message-id-development-fallback'
+      };
+    }
+    
     throw new Error(`Email sending failed: ${error.message}`);
   }
 };

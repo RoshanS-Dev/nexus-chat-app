@@ -170,6 +170,7 @@ export const sendMessage = async (req, res) => {
           url: result.secure_url,
           type: attachmentFileType,
           filename: file.originalname,
+          mimetype: file.mimetype,
         });
 
         messageData.messageType = attachmentType;

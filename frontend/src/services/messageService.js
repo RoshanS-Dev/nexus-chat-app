@@ -14,7 +14,11 @@ export const messageService = {
       files.forEach((file) => formData.append('attachments', file));
     }
 
-    const response = await api.post('/messages/send', formData);
+    const response = await api.post('/messages/send', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   },
 
