@@ -37,6 +37,9 @@ import {
   incrementUnread,
   updateRecentChat,
   setGroups,
+  addGroup,
+  updateGroupLastMessage,
+  removeGroup,
 } from '../redux/slices/chatSlice';
 import {
   setNotifications,
@@ -95,7 +98,8 @@ const ModernChatPage = () => {
     setupSocketListeners();
     return () => {
       ['friend_request_received', 'friend_request', 'friend_request_accepted',
-        'receive_message', 'online_users', 'notification'].forEach((e) => socketService.off(e));
+        'receive_message', 'online_users', 'notification',
+        'group_created', 'added_to_group', 'removed_from_group', 'group_deleted'].forEach((e) => socketService.off(e));
     };
   }, []);
 
@@ -178,16 +182,34 @@ const ModernChatPage = () => {
 
     socketService.on('receive_message', (message) => {
       if (!message?._id) return;
-      if (isMessageForCurrentChat(message)) dispatch(addMessage(message));
-      dispatch(updateRecentChat({ userId: message.sender?._id || message.group, message }));
 
-      const senderId = message.sender?._id?.toString() || message.sender?.toString();
-      const currentChatId = selectedChatRef.current?._id?.toString();
       const myId = userRef.current?._id?.toString();
+      const currentChatId = selectedChatRef.current?._id?.toString();
+      const senderId = message.sender?._id?.toString() || message.sender?.toString();
 
-      if (senderId && senderId !== myId && senderId !== currentChatId) {
-        dispatch(incrementUnread(senderId));
-        toast(`New message from ${message.sender?.fullName || 'someone'}`, { icon: '💬' });
+      if (isMessageForCurrentChat(message)) {
+        dispatch(addMessage(message));
+      }
+
+      if (message.group) {
+        const groupId = message.group.toString();
+        dispatch(updateGroupLastMessage({ groupId, message }));
+        if (senderId !== myId && groupId !== currentChatId) {
+          dispatch(incrementUnread(groupId));
+          toast(`New message in group`, { icon: '💬' });
+        }
+      } else {
+        const otherUserId = senderId === myId
+          ? (message.receiver?._id?.toString() || message.receiver?.toString())
+          : senderId;
+
+        if (otherUserId) {
+          dispatch(updateRecentChat({ userId: otherUserId, message }));
+          if (senderId !== myId && otherUserId !== currentChatId) {
+            dispatch(incrementUnread(otherUserId));
+            toast(`New message from ${message.sender?.fullName || 'someone'}`, { icon: '💬' });
+          }
+        }
       }
     });
 
@@ -197,6 +219,37 @@ const ModernChatPage = () => {
 
     socketService.on('notification', () => {
       notificationService.getUnreadCount().then((c) => dispatch(setUnreadCount(c)));
+    });
+
+    socketService.on('group_created', (group) => {
+      if (group?._id) {
+        dispatch(addGroup(group));
+        socketService.joinRoom(group._id);
+      }
+    });
+
+    socketService.on('added_to_group', (group) => {
+      if (group?._id) {
+        dispatch(addGroup(group));
+        socketService.joinRoom(group._id);
+        toast(`You were added to the group "${group.groupName}"`, { icon: '👥' });
+      }
+    });
+
+    socketService.on('removed_from_group', ({ groupId }) => {
+      if (groupId) {
+        dispatch(removeGroup(groupId));
+        socketService.leaveRoom(groupId);
+        toast('You were removed from a group', { icon: 'ℹ' });
+      }
+    });
+
+    socketService.on('group_deleted', ({ groupId }) => {
+      if (groupId) {
+        dispatch(removeGroup(groupId));
+        socketService.leaveRoom(groupId);
+        toast('A group you were in was deleted', { icon: 'ℹ' });
+      }
     });
   };
 

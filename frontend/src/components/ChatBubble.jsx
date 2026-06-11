@@ -119,6 +119,16 @@ const ChatBubble = ({
     );
   }
 
+  if (message.messageType === 'system') {
+    return (
+      <div className="flex justify-center my-2 w-full">
+        <div className="px-4 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs font-semibold max-w-[85%] text-center shadow-sm border border-gray-200/50">
+          {message.text}
+        </div>
+      </div>
+    );
+  }
+
   const formatTime = (date) => {
     if (!date) return '';
     return new Date(date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });

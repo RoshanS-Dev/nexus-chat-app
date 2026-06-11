@@ -1,6 +1,28 @@
 import Group from '../models/Group.js';
 import Message from '../models/Message.js';
+import User from '../models/User.js';
 import cloudinary, { isCloudinaryConfigured } from '../config/cloudinary.js';
+
+const sendSystemMessage = async (req, groupId, text) => {
+  try {
+    const systemMessage = await Message.create({
+      sender: req.user._id,
+      group: groupId,
+      text,
+      messageType: 'system',
+    });
+    await systemMessage.populate('sender', 'fullName username avatar');
+    await Group.findByIdAndUpdate(groupId, { lastMessage: systemMessage._id });
+    
+    const io = req.app.get('io');
+    if (io) {
+      io.to(groupId.toString()).emit('receive_message', systemMessage);
+    }
+    return systemMessage;
+  } catch (error) {
+    console.error('Failed to create system message:', error);
+  }
+};
 
 // @desc    Create group
 // @route   POST /api/groups
@@ -40,6 +62,9 @@ export const createGroup = async (req, res) => {
 
     await group.populate('members', 'fullName username avatar');
     await group.populate('admin', 'fullName username avatar');
+
+    // Create system message for group creation
+    await sendSystemMessage(req, group._id, `${req.user.fullName} created the group`);
 
     console.log('Group created successfully:', group._id);
 
@@ -126,8 +151,14 @@ export const updateGroup = async (req, res) => {
       return res.status(403).json({ message: 'Only admin can update group' });
     }
 
-    if (groupName) group.groupName = groupName;
-    if (description !== undefined) group.description = description;
+    if (groupName && groupName !== group.groupName) {
+      group.groupName = groupName;
+      await sendSystemMessage(req, group._id, `${req.user.fullName} changed the group name to "${groupName}"`);
+    }
+    if (description !== undefined && description !== group.description) {
+      group.description = description;
+      await sendSystemMessage(req, group._id, `Group description was updated by ${req.user.fullName}`);
+    }
 
     await group.save();
     await group.populate('members', 'fullName username avatar');
@@ -183,6 +214,9 @@ export const uploadGroupAvatar = async (req, res) => {
     group.groupAvatar = result.secure_url;
     await group.save();
 
+    // Create system message for photo change
+    await sendSystemMessage(req, group._id, `${req.user.fullName} changed the group photo`);
+
     res.json({
       message: 'Group avatar updated',
       groupAvatar: result.secure_url,
@@ -210,14 +244,26 @@ export const addMembers = async (req, res) => {
     }
 
     // Add new members
+    const addedMemberIds = [];
     members.forEach((memberId) => {
-      if (!group.members.includes(memberId)) {
+      if (!group.members.some(m => m.toString() === memberId.toString())) {
         group.members.push(memberId);
+        addedMemberIds.push(memberId);
       }
     });
 
     await group.save();
     await group.populate('members', 'fullName username avatar');
+    await group.populate('admin', 'fullName username avatar');
+    await group.populate('admins', 'fullName username avatar');
+
+    // Create system message for each added user
+    if (addedMemberIds.length > 0) {
+      const addedUsers = await User.find({ _id: { $in: addedMemberIds } }).select('fullName');
+      for (const addedUser of addedUsers) {
+        await sendSystemMessage(req, group._id, `${addedUser.fullName} was added by ${req.user.fullName}`);
+      }
+    }
 
     // Emit socket event
     const io = req.app.get('io');
@@ -253,8 +299,15 @@ export const removeMember = async (req, res) => {
       return res.status(400).json({ message: 'Cannot remove admin' });
     }
 
+    // Fetch removed user details
+    const removedUser = await User.findById(memberId).select('fullName');
+
     group.members = group.members.filter((m) => m.toString() !== memberId);
     await group.save();
+
+    if (removedUser) {
+      await sendSystemMessage(req, group._id, `${removedUser.fullName} was removed by ${req.user.fullName}`);
+    }
 
     // Emit socket event
     const io = req.app.get('io');
@@ -288,6 +341,9 @@ export const leaveGroup = async (req, res) => {
       (m) => m.toString() !== req.user._id.toString()
     );
     await group.save();
+
+    // Create system message
+    await sendSystemMessage(req, group._id, `${req.user.fullName} left the group`);
 
     res.json({ message: 'Left group successfully' });
   } catch (error) {
@@ -582,6 +638,9 @@ export const joinGroupViaInvite = async (req, res) => {
     await group.populate('members', 'fullName username avatar');
     await group.populate('admin', 'fullName username avatar');
 
+    // Create system message
+    await sendSystemMessage(req, group._id, `${req.user.fullName} joined via invite link`);
+
     // Emit socket event
     const io = req.app.get('io');
     io.to(group._id.toString()).emit('member_joined', {
@@ -617,6 +676,10 @@ export const updateGroupSettings = async (req, res) => {
       return res.status(403).json({ message: 'Only admin can update group settings' });
     }
 
+    // Track changes for system messages
+    const nameChanged = groupName && groupName !== group.groupName;
+    const descriptionChanged = description !== undefined && description !== group.description;
+
     if (groupName) group.groupName = groupName;
     if (description !== undefined) group.description = description;
     if (groupRules !== undefined) group.groupRules = groupRules;
@@ -625,6 +688,14 @@ export const updateGroupSettings = async (req, res) => {
 
     await group.save();
     await group.populate('members', 'fullName username avatar');
+
+    // Send system messages for tracked changes
+    if (nameChanged) {
+      await sendSystemMessage(req, group._id, `${req.user.fullName} changed the group name to "${groupName}"`);
+    }
+    if (descriptionChanged) {
+      await sendSystemMessage(req, group._id, `Group description was updated by ${req.user.fullName}`);
+    }
 
     // Emit socket event
     const io = req.app.get('io');

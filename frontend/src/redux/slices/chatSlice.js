@@ -64,6 +64,34 @@ const chatSlice = createSlice({
     addGroup: (state, action) => {
       state.groups.unshift(action.payload);
     },
+    updateGroupLastMessage: (state, action) => {
+      const { groupId, message } = action.payload;
+      if (!groupId || !message) return;
+
+      const targetId = groupId.toString();
+      const groups = Array.isArray(state.groups) ? [...state.groups] : [];
+      const index = groups.findIndex((g) => g._id?.toString() === targetId);
+
+      if (index !== -1) {
+        groups[index] = { ...groups[index], lastMessage: message };
+        // Move group to top
+        const [updated] = groups.splice(index, 1);
+        state.groups = [updated, ...groups];
+      }
+    },
+    removeGroup: (state, action) => {
+      const groupId = action.payload;
+      if (!groupId) return;
+
+      const targetId = groupId.toString();
+      state.groups = (Array.isArray(state.groups) ? state.groups : [])
+        .filter((g) => g._id?.toString() !== targetId);
+
+      if (state.selectedChat?._id?.toString() === targetId) {
+        state.selectedChat = null;
+        state.messages = [];
+      }
+    },
     setOnlineUsers: (state, action) => {
       state.onlineUsers = action.payload;
     },
@@ -104,6 +132,8 @@ export const {
   updateRecentChat,
   setGroups,
   addGroup,
+  updateGroupLastMessage,
+  removeGroup,
   setOnlineUsers,
   setTypingUser,
   incrementUnread,

@@ -5,6 +5,8 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 class SocketService {
   constructor() {
     this.socket = null;
+    this.listeners = new Map();
+    this.joinedRooms = new Set();
   }
 
   connect(token) {
@@ -17,8 +19,19 @@ class SocketService {
       reconnectionAttempts: 5,
     });
 
+    // Rebind all registered listeners
+    this.listeners.forEach((callbacks, event) => {
+      callbacks.forEach((callback) => {
+        this.socket.on(event, callback);
+      });
+    });
+
     this.socket.on('connect', () => {
       console.log('Socket connected');
+      // Rejoin all rooms
+      this.joinedRooms.forEach((roomId) => {
+        this.socket.emit('join_room', roomId);
+      });
     });
 
     this.socket.on('disconnect', () => {
@@ -35,17 +48,36 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
     }
+    this.listeners.clear();
+    this.joinedRooms.clear();
   }
 
   on(event, callback) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event).add(callback);
+
     if (this.socket) {
       this.socket.on(event, callback);
     }
   }
 
   off(event, callback) {
-    if (this.socket) {
-      this.socket.off(event, callback);
+    if (event) {
+      if (callback) {
+        if (this.listeners.has(event)) {
+          this.listeners.get(event).delete(callback);
+        }
+        if (this.socket) {
+          this.socket.off(event, callback);
+        }
+      } else {
+        this.listeners.delete(event);
+        if (this.socket) {
+          this.socket.off(event);
+        }
+      }
     }
   }
 
@@ -56,11 +88,17 @@ class SocketService {
   }
 
   joinRoom(roomId) {
-    this.emit('join_room', roomId);
+    if (roomId) {
+      this.joinedRooms.add(roomId);
+      this.emit('join_room', roomId);
+    }
   }
 
   leaveRoom(roomId) {
-    this.emit('leave_room', roomId);
+    if (roomId) {
+      this.joinedRooms.delete(roomId);
+      this.emit('leave_room', roomId);
+    }
   }
 
   sendMessage(data) {

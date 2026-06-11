@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Users, Plus, Loader } from 'lucide-react';
 import { groupService } from '../services/groupService';
-import { addGroup, setSelectedChat } from '../redux/slices/chatSlice';
+import { addGroup, setSelectedChat, clearUnread } from '../redux/slices/chatSlice';
 import toast from 'react-hot-toast';
 
 const GroupsList = () => {
-  const { groups } = useSelector((state) => state.chat);
+  const { groups, unreadCounts } = useSelector((state) => state.chat);
   const friendList = useSelector((state) => state.friend.friends);
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -15,6 +15,22 @@ const GroupsList = () => {
 
   const groupList = Array.isArray(groups) ? groups : [];
   const availableFriends = Array.isArray(friendList) ? friendList : [];
+
+  const formatTime = (date) => {
+    if (!date) return '';
+    const now = new Date();
+    const messageDate = new Date(date);
+    const diff = now - messageDate;
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+    return messageDate.toLocaleDateString();
+  };
+
+  const handleSelectGroup = (group) => {
+    dispatch(setSelectedChat({ ...group, isGroup: true }));
+    dispatch(clearUnread(group._id));
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -115,24 +131,47 @@ const GroupsList = () => {
             <p className="text-gray-500 text-sm">No groups yet</p>
           </div>
         ) : (
-          groupList.map((group) => (
-            <button
-              key={group._id}
-              type="button"
-              onClick={() => dispatch(setSelectedChat({ ...group, isGroup: true }))}
-              className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 text-left min-w-0"
-            >
-              <img
-                src={group.groupAvatar || '/default-avatar.png'}
-                alt={group.groupName}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover shrink-0"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-sm text-gray-900 truncate">{group.groupName}</p>
-                <p className="text-xs text-gray-500">{group.members?.length || 0} members</p>
-              </div>
-            </button>
-          ))
+          groupList.map((group) => {
+            const currentUnread = unreadCounts[group._id] || 0;
+            return (
+              <button
+                key={group._id}
+                type="button"
+                onClick={() => handleSelectGroup(group)}
+                className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 text-left min-w-0"
+              >
+                <img
+                  src={group.groupAvatar || '/default-avatar.png'}
+                  alt={group.groupName}
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <p className="font-semibold text-sm text-gray-900 truncate">{group.groupName}</p>
+                    {group.lastMessage && (
+                      <span className="text-[10px] text-gray-400 shrink-0 ml-2">
+                        {formatTime(group.lastMessage.createdAt)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500 truncate pr-6">
+                      {group.lastMessage ? (
+                        `${group.lastMessage.sender?.fullName || 'User'}: ${group.lastMessage.text || 'Attachment'}`
+                      ) : (
+                        `${group.members?.length || 0} members`
+                      )}
+                    </p>
+                    {currentUnread > 0 && (
+                      <span className="badge-danger min-w-[20px] h-5 text-[10px] shrink-0">
+                        {currentUnread > 9 ? '9+' : currentUnread}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
     </div>

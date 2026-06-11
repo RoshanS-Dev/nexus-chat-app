@@ -186,6 +186,10 @@ export const sendMessage = async (req, res) => {
       { path: 'replyTo', select: 'text sender attachments', populate: { path: 'sender', select: 'fullName' } },
     ]);
 
+    if (groupId) {
+      await Group.findByIdAndUpdate(groupId, { lastMessage: message._id });
+    }
+
     const io = req.app.get('io');
     if (groupId) {
       io.to(groupId).emit('receive_message', message);
@@ -740,6 +744,8 @@ export const createPoll = async (req, res) => {
     });
 
     await message.populate('sender', 'fullName username avatar');
+
+    await Group.findByIdAndUpdate(groupId, { lastMessage: message._id });
 
     // Broadcast to group
     const io = req.app.get('io');

@@ -128,9 +128,6 @@ const ChatWindow = ({ onToggleProfile, onBack, showBack, onGroupInfoClick }) => 
     }
 
     return () => {
-      if (activeGroupId) {
-        socketService.leaveRoom(activeGroupId);
-      }
       setTypingUsers([]);
     };
   }, [chatId, isGroup]);
@@ -221,7 +218,7 @@ const ChatWindow = ({ onToggleProfile, onBack, showBack, onGroupInfoClick }) => 
     }));
 
     socketService.on('user_typing', typingHandler);
-    socketService.on('group_typing', groupTypingHandler);
+    socketService.on('user_typing_group', groupTypingHandler);
     socketService.on('message_updated', onUpdated);
     const onPinnedMessage = ({ groupId }) => {
       if (groupId !== chatId) return;
@@ -244,7 +241,7 @@ const ChatWindow = ({ onToggleProfile, onBack, showBack, onGroupInfoClick }) => 
 
     return () => {
       socketService.off('user_typing', typingHandler);
-      socketService.off('group_typing', groupTypingHandler);
+      socketService.off('user_typing_group', groupTypingHandler);
       socketService.off('message_updated', onUpdated);
       socketService.off('message_reaction', onUpdated);
       socketService.off('message_deleted', onDeleted);

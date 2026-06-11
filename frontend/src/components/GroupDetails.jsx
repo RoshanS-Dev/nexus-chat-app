@@ -15,9 +15,13 @@ import {
   Camera,
   Search,
   ChevronRight,
+  Check,
+  UserMinus,
+  Info,
 } from 'lucide-react';
 import { groupService } from '../services/groupService';
 import { userService } from '../services/userService';
+import { setSelectedChat, setGroups } from '../redux/slices/chatSlice';
 import toast from 'react-hot-toast';
 
 const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?background=3B82F6&color=fff&bold=true';
@@ -31,6 +35,8 @@ const WALLPAPERS = [
 
 const GroupDetails = ({ group, onClose, onSettingsClick }) => {
   const { user } = useSelector((state) => state.auth);
+  const { selectedChat, groups } = useSelector((state) => state.chat);
+  const { friends } = useSelector((state) => state.friend);
   const dispatch = useDispatch();
 
   const [activeTab, setActiveTab] = useState('info');
@@ -41,6 +47,34 @@ const GroupDetails = ({ group, onClose, onSettingsClick }) => {
   const [loading, setLoading] = useState(false);
   const [inviteCode, setInviteCode] = useState(group?.inviteCode || '');
   const [wallpaper, setWallpaper] = useState('');
+
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [memberSearchResults, setMemberSearchResults] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState(null);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(null);
+
+  useEffect(() => {
+    if (!memberSearchQuery.trim()) {
+      setMemberSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const results = await userService.searchUsers(memberSearchQuery.trim());
+        setMemberSearchResults(Array.isArray(results) ? results : []);
+      } catch (error) {
+        console.error('Failed to search users:', error);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [memberSearchQuery]);
 
   const isAdmin = group?.admin?._id === user?._id;
   const isMember = group?.members?.some(m => m._id === user?._id);
@@ -106,6 +140,66 @@ const GroupDetails = ({ group, onClose, onSettingsClick }) => {
       toast.error('Failed to load files');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleSelectUser = (userId) => {
+    setSelectedUsers((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleAddMembersSubmit = async () => {
+    if (selectedUsers.length === 0) return;
+    setSubmitting(true);
+    try {
+      const updatedGroup = await groupService.addMembers(group._id, selectedUsers);
+      toast.success('Members added successfully!');
+      
+      dispatch(setSelectedChat({ ...selectedChat, members: updatedGroup.members }));
+      
+      if (Array.isArray(groups)) {
+        dispatch(setGroups(groups.map((g) => g._id === updatedGroup._id ? { ...g, members: updatedGroup.members } : g)));
+      }
+
+      setSelectedUsers([]);
+      setMemberSearchQuery('');
+      setShowAddMembersModal(false);
+      
+      loadMembers();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to add members');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const existingMemberIds = new Set(group?.members?.map((m) => m._id || m) || []);
+  const usersToDisplay = memberSearchQuery.trim()
+    ? memberSearchResults.filter((u) => !existingMemberIds.has(u._id))
+    : (friends || []).filter((f) => !existingMemberIds.has(f._id));
+
+  const handleRemoveMember = async (memberId) => {
+    setRemovingMemberId(memberId);
+    try {
+      await groupService.removeMember(group._id, memberId);
+      setMembers((prev) => prev.filter((m) => m._id !== memberId));
+      
+      // Update selected chat and groups in redux
+      const updatedMembers = group.members.filter((m) => (m._id || m) !== memberId);
+      dispatch(setSelectedChat({ ...selectedChat, members: updatedMembers }));
+      if (Array.isArray(groups)) {
+        dispatch(setGroups(groups.map((g) => g._id === group._id ? { ...g, members: updatedMembers } : g)));
+      }
+
+      toast.success('Member removed');
+      setShowRemoveConfirm(null);
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to remove member');
+    } finally {
+      setRemovingMemberId(null);
     }
   };
 
@@ -192,6 +286,18 @@ const GroupDetails = ({ group, onClose, onSettingsClick }) => {
               exit={{ opacity: 0 }}
               className="space-y-4"
             >
+              {/* Group Description */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-semibold text-sm text-gray-900 mb-2 flex items-center gap-2">
+                  <Info size={16} className="text-gray-500" /> Description
+                </h3>
+                {group?.description ? (
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{group.description}</p>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No description added</p>
+                )}
+              </div>
+
               {/* Group Rules */}
               {group?.groupRules && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -340,16 +446,28 @@ const GroupDetails = ({ group, onClose, onSettingsClick }) => {
               className="space-y-3"
             >
               {/* Search */}
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onBlur={() => loadMembers()}
-                  placeholder="Search members..."
-                  className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-nexus-primary/30"
-                />
+              <div className="flex flex-col gap-3">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMembersModal(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-nexus-primary text-white rounded-lg hover:bg-nexus-secondary transition-colors font-medium text-sm"
+                  >
+                    <Users size={16} />
+                    Add Members
+                  </button>
+                )}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onBlur={() => loadMembers()}
+                    placeholder="Search members..."
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-nexus-primary/30"
+                  />
+                </div>
               </div>
 
               {/* Members List */}
@@ -395,9 +513,14 @@ const GroupDetails = ({ group, onClose, onSettingsClick }) => {
                             )}
                           </div>
                         </div>
-                        {isAdmin && !isOwner && (
-                          <button type="button" className="p-1 hover:bg-white rounded transition-colors">
-                            <ChevronRight size={18} className="text-gray-400" />
+                        {isAdmin && !isOwner && member._id !== user?._id && (
+                          <button
+                            type="button"
+                            onClick={() => setShowRemoveConfirm(member)}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remove member"
+                          >
+                            <UserMinus size={16} />
                           </button>
                         )}
                       </motion.div>
@@ -443,6 +566,183 @@ const GroupDetails = ({ group, onClose, onSettingsClick }) => {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Add Members Modal */}
+      <AnimatePresence>
+        {showAddMembersModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] text-left"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gradient-to-r from-nexus-primary/5 to-nexus-secondary/5 shrink-0">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Users size={20} className="text-nexus-primary animate-pulse" />
+                  Add Members
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddMembersModal(false);
+                    setSelectedUsers([]);
+                    setMemberSearchQuery('');
+                  }}
+                  className="p-1.5 hover:bg-gray-100 rounded-xl text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Search Box */}
+              <div className="p-4 border-b border-gray-100 shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    value={memberSearchQuery}
+                    onChange={(e) => setMemberSearchQuery(e.target.value)}
+                    placeholder="Search users..."
+                    className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-nexus-primary/30 transition-shadow"
+                    autoFocus
+                  />
+                  {searchLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <div className="w-4 h-4 border-2 border-nexus-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Users List */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+                {searchLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="w-8 h-8 border-2 border-nexus-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : usersToDisplay.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users size={32} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-sm">No users found to add</p>
+                    <p className="text-xs text-gray-400 mt-1">Users already in the group or not matching search are excluded</p>
+                  </div>
+                ) : (
+                  usersToDisplay.map((u) => {
+                    const isSelected = selectedUsers.includes(u._id);
+                    return (
+                      <motion.div
+                        key={u._id}
+                        whileHover={{ scale: 1.01 }}
+                        onClick={() => toggleSelectUser(u._id)}
+                        className={`flex items-center justify-between p-3 rounded-xl cursor-pointer border transition-all ${
+                          isSelected
+                            ? 'bg-nexus-primary/5 border-nexus-primary/30'
+                            : 'bg-gray-50 hover:bg-gray-100 border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src={u.avatar || DEFAULT_AVATAR}
+                            alt={u.fullName}
+                            className="w-10 h-10 rounded-full object-cover shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{u.fullName}</p>
+                            <p className="text-xs text-gray-500 truncate">@{u.username}</p>
+                          </div>
+                        </div>
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                          isSelected
+                            ? 'bg-nexus-primary border-nexus-primary text-white'
+                            : 'border-gray-300 bg-white'
+                        }`}>
+                          {isSelected && <Check size={14} strokeWidth={3} />}
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-4 shrink-0">
+                <span className="text-xs text-gray-500 font-medium">
+                  {selectedUsers.length} user{selectedUsers.length !== 1 && 's'} selected
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddMembersModal(false);
+                      setSelectedUsers([]);
+                      setMemberSearchQuery('');
+                    }}
+                    className="px-4 py-2 border border-gray-200 rounded-xl text-gray-700 hover:bg-gray-100 transition-colors text-sm font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddMembersSubmit}
+                    disabled={selectedUsers.length === 0 || submitting}
+                    className="px-4 py-2 bg-nexus-primary hover:bg-nexus-secondary disabled:opacity-50 text-white rounded-xl transition-all text-sm font-semibold flex items-center gap-2"
+                  >
+                    {submitting ? 'Adding...' : 'Add directly'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Remove Member Confirmation Modal */}
+      <AnimatePresence>
+        {showRemoveConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-sm overflow-hidden"
+            >
+              <div className="p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <UserMinus size={20} className="text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Remove Member</h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-1">
+                  Are you sure you want to remove <strong>{showRemoveConfirm.fullName}</strong> from this group?
+                </p>
+                <p className="text-xs text-gray-400">
+                  They will no longer be able to see group messages.
+                </p>
+              </div>
+              <div className="flex border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowRemoveConfirm(null)}
+                  className="flex-1 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveMember(showRemoveConfirm._id)}
+                  disabled={removingMemberId === showRemoveConfirm._id}
+                  className="flex-1 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors border-l border-gray-100 disabled:opacity-50"
+                >
+                  {removingMemberId === showRemoveConfirm._id ? 'Removing...' : 'Remove'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
