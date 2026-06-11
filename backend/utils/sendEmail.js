@@ -17,19 +17,28 @@ const sendEmail = async (options) => {
       html: options.html,
     });
 
+    // IMPORTANT: Check for Resend errors
+    if (response.error) {
+      console.error("❌ Resend Error:", response.error);
+      throw new Error(
+        response.error.message || "Failed to send email via Resend"
+      );
+    }
+
+    if (!response.data || !response.data.id) {
+      throw new Error("Failed to send email: No message ID returned from Resend");
+    }
+
     console.log("✅ Email sent successfully");
-    console.log("📬 Response:", response);
+    console.log("📬 Message ID:", response.data.id);
 
     return {
       success: true,
-      messageId: response.data?.id,
+      messageId: response.data.id,
     };
   } catch (error) {
-    console.error("❌ Email sending failed:", error);
-
-    throw new Error(
-      `Email sending failed: ${error.message || "Unknown error"}`
-    );
+    console.error("❌ Email sending failed:", error.message);
+    throw error;
   }
 };
 

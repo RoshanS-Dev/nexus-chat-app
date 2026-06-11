@@ -58,9 +58,8 @@ export const register = async (req, res) => {
       password,
     });
 
-    // Generate OTP
+    // Generate OTP in memory (do not save to database yet)
     const otp = user.generateOTP();
-    await user.save();
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('🔐 Generated OTP for user:', user.email, '| OTP:', otp);
@@ -108,6 +107,13 @@ export const register = async (req, res) => {
         `,
       });
 
+      if (!emailResult.success) {
+        throw new Error(emailResult.error || 'Failed to send verification email');
+      }
+
+      // Save OTP to database only when email is sent successfully
+      await user.save();
+
       console.log('✅ OTP email sent successfully to:', user.email);
       console.log('📬 Email Message ID:', emailResult.messageId);
     } catch (emailError) {
@@ -115,7 +121,7 @@ export const register = async (req, res) => {
       // Delete user if email fails
       await User.findByIdAndDelete(user._id);
       return res.status(500).json({ 
-        message: 'Failed to send verification email. Please try again or check your email address.',
+        message: `Failed to send verification email: ${emailError.message}. Please try again or check your email address.`,
         error: emailError.message 
       });
     }
@@ -265,7 +271,6 @@ export const forgotPassword = async (req, res) => {
 
     // Generate OTP
     const otp = user.generateOTP();
-    await user.save();
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('🔐 Generated password reset OTP for:', user.email, '| OTP:', otp);
@@ -316,12 +321,15 @@ export const forgotPassword = async (req, res) => {
         `,
       });
 
+      // Save OTP to database only when email is sent successfully
+      await user.save();
+
       console.log('✅ Password reset OTP email sent successfully to:', user.email);
       console.log('📬 Email Message ID:', emailResult.messageId);
     } catch (emailError) {
       console.error('❌ Failed to send password reset email:', emailError.message);
       return res.status(500).json({ 
-        message: 'Failed to send password reset email. Please try again.',
+        message: `Failed to send password reset email: ${emailError.message}. Please try again.`,
         error: emailError.message 
       });
     }
@@ -408,7 +416,6 @@ export const resendOTP = async (req, res) => {
 
     // Generate new OTP
     const otp = user.generateOTP();
-    await user.save();
 
     if (process.env.NODE_ENV !== 'production') {
       console.log('🔐 Resending OTP for user:', user.email, '| OTP:', otp);
@@ -456,12 +463,15 @@ export const resendOTP = async (req, res) => {
         `,
       });
 
+      // Save OTP to database only when email is sent successfully
+      await user.save();
+
       console.log('✅ OTP resent successfully to:', user.email);
       console.log('📬 Email Message ID:', emailResult.messageId);
     } catch (emailError) {
       console.error('❌ Failed to resend OTP email:', emailError.message);
       return res.status(500).json({ 
-        message: 'Failed to resend OTP email. Please try again.',
+        message: `Failed to resend OTP email: ${emailError.message}. Please try again.`,
         error: emailError.message 
       });
     }
