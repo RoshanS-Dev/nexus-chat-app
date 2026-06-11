@@ -31,11 +31,8 @@ services:
       - key: CLOUDINARY_API_SECRET
         sync: false
         placeholder: "Your Cloudinary API Secret"
-      - key: EMAIL_USER
+      - key: BREVO_API_KEY
         sync: false
-        placeholder: "your_gmail_address@gmail.com"
-      - key: EMAIL_PASS
-        sync: false
-        placeholder: "Your Gmail App Password"
+        placeholder: "Your Brevo API Key"
       - key: OTP_EXPIRE_MINUTES
         value: 5

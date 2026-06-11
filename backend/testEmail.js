@@ -8,20 +8,14 @@ console.log('🧪 Testing Email Configuration...\n');
 
 // Check if environment variables are set
 console.log('📋 Environment Variables Check:');
-console.log('EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ Not Set');
-console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Set' : '❌ Not Set');
+console.log('BREVO_API_KEY:', process.env.BREVO_API_KEY ? '✅ Set' : '❌ Not Set');
 console.log('OTP_EXPIRE_MINUTES:', process.env.OTP_EXPIRE_MINUTES || '5 (default)');
 console.log('');
 
-if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-  console.error('❌ ERROR: EMAIL_USER and EMAIL_PASS must be set in .env file');
+if (!process.env.BREVO_API_KEY) {
+  console.error('❌ ERROR: BREVO_API_KEY must be set in .env file');
   console.error('');
-  console.error('Please follow these steps:');
-  console.error('1. Enable 2-Step Verification on your Gmail account');
-  console.error('2. Generate an App Password');
-  console.error('3. Add EMAIL_USER and EMAIL_PASS to your .env file');
-  console.error('');
-  console.error('See OTP_SETUP_GUIDE.md for detailed instructions');
+  console.error('Please configure BREVO_API_KEY in your .env file.');
   process.exit(1);
 }
 
@@ -33,7 +27,7 @@ console.log('Test OTP:', testOTP);
 console.log('');
 
 sendEmail({
-  email: process.env.EMAIL_USER, // Send to yourself for testing
+  email: process.env.TEST_EMAIL || 'roshanshaikh21122006@gmail.com', // Recipient email for testing
   subject: 'Test Email - Chat App OTP System',
   html: `
     <!DOCTYPE html>
@@ -66,8 +60,7 @@ sendEmail({
           </div>
           <p><strong>What this means:</strong></p>
           <ul>
-            <li>✅ Gmail App Password is configured correctly</li>
-            <li>✅ SMTP connection is working</li>
+            <li>✅ Brevo REST API connection is working</li>
             <li>✅ Email sending is functional</li>
             <li>✅ Your chat app can now send OTP emails</li>
           </ul>
@@ -88,12 +81,15 @@ sendEmail({
   `,
 })
   .then((result) => {
+    if (!result.success) {
+      throw new Error(result.error || 'Unknown email sending error');
+    }
     console.log('');
     console.log('✅ ========================================');
     console.log('✅ EMAIL TEST SUCCESSFUL!');
     console.log('✅ ========================================');
     console.log('');
-    console.log('📬 Check your inbox:', process.env.EMAIL_USER);
+    console.log('📬 Check your inbox:', process.env.TEST_EMAIL || 'roshanshaikh21122006@gmail.com');
     console.log('📬 Message ID:', result.messageId);
     console.log('');
     console.log('🎉 Your email configuration is working correctly!');
@@ -117,20 +113,14 @@ sendEmail({
     console.log('🔧 Troubleshooting:');
     console.log('');
     
-    if (error.message.includes('Authentication') || error.message.includes('Invalid login')) {
+    if (error.message.includes('Unauthorized') || error.message.includes('api-key') || error.message.includes('key')) {
       console.log('❌ Authentication Error - Check these:');
-      console.log('   1. EMAIL_USER is your full Gmail address');
-      console.log('   2. EMAIL_PASS is your Gmail App Password (16 characters)');
-      console.log('   3. NOT your regular Gmail password');
-      console.log('   4. 2-Step Verification is enabled on Gmail');
-      console.log('   5. No extra spaces in EMAIL_PASS');
-      console.log('');
-      console.log('📖 See OTP_SETUP_GUIDE.md for detailed instructions');
-    } else if (error.message.includes('ECONNECTION') || error.message.includes('timeout')) {
+      console.log('   1. BREVO_API_KEY is correct');
+      console.log('   2. Your sender email is verified in Brevo');
+    } else if (error.message.includes('ECONNECTION') || error.message.includes('timeout') || error.message.includes('fetch')) {
       console.log('❌ Connection Error - Check these:');
       console.log('   1. Internet connection is working');
-      console.log('   2. Firewall is not blocking SMTP');
-      console.log('   3. Try a different network');
+      console.log('   2. Firewall is not blocking outgoing HTTP requests to api.brevo.com');
     } else {
       console.log('❌ Unknown Error:');
       console.log('   ', error.message);

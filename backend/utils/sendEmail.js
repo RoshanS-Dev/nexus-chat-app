@@ -1,44 +1,56 @@
-import { Resend } from "resend";
-
 const sendEmail = async (options) => {
   try {
-    console.log("📧 Attempting to send email to:", options.email);
+    console.log("📧 Attempting to send email via Brevo API to:", options.email);
 
-    if (!process.env.RESEND_API_KEY) {
-      throw new Error("RESEND_API_KEY is missing");
+    console.log("BREVO_API_KEY exists:", !!process.env.BREVO_API_KEY);
+
+    if (!process.env.BREVO_API_KEY) {
+      throw new Error("Brevo API configuration (BREVO_API_KEY) is missing");
     }
 
-    const resend = new Resend(process.env.RESEND_API_KEY);
-
-    const response = await resend.emails.send({
-      from: "NEXUS <onboarding@resend.dev>",
-      to: options.email,
-      subject: options.subject,
-      html: options.html,
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "api-key": process.env.BREVO_API_KEY,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sender: {
+          name: "NEXUS",
+          email: "roshanshaikh21122006@gmail.com",
+        },
+        to: [
+          {
+            email: options.email,
+          },
+        ],
+        subject: options.subject,
+        htmlContent: options.html,
+      }),
     });
 
-    // IMPORTANT: Check for Resend errors
-    if (response.error) {
-      console.error("❌ Resend Error:", response.error);
-      throw new Error(
-        response.error.message || "Failed to send email via Resend"
-      );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Brevo API returned status ${response.status}`);
     }
 
-    if (!response.data || !response.data.id) {
-      throw new Error("Failed to send email: No message ID returned from Resend");
-    }
+    const data = await response.json();
 
     console.log("✅ Email sent successfully");
-    console.log("📬 Message ID:", response.data.id);
+    console.log("📬 Message ID:", data.messageId);
 
     return {
       success: true,
-      messageId: response.data.id,
+      messageId: data.messageId,
     };
   } catch (error) {
-    console.error("❌ Email sending failed:", error.message);
-    throw error;
+    console.error("❌ Email sending failed:", error);
+
+    return {
+      success: false,
+      error: error.message,
+    };
   }
 };
 

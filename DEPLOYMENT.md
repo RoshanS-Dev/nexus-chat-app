@@ -21,8 +21,7 @@ Configure these in your Render Web Service settings under **Environment**:
 | `CLOUDINARY_CLOUD_NAME` | No* | Cloudinary cloud name (required for media/avatar upload) |
 | `CLOUDINARY_API_KEY` | No* | Cloudinary API Key (required for media/avatar upload) |
 | `CLOUDINARY_API_SECRET` | No* | Cloudinary API Secret (required for media/avatar upload) |
-| `EMAIL_USER` | No* | Gmail address (required for OTP verification) |
-| `EMAIL_PASS` | No* | Gmail **App Password** (required for OTP verification) |
+| `BREVO_API_KEY` | No* | Brevo Transactional Email REST API Key |
 | `OTP_EXPIRE_MINUTES` | No | `5` (OTP code validity length) |
 
 > \* *Note: Cloudinary and Email credentials are recommended. If not provided, the server will start successfully, but profile avatars, file attachments, and registration/password OTP emails will fail to send.*
@@ -95,10 +94,8 @@ Since the frontend is built using Vite, it must be deployed as a static Single P
 2. From the Console Dashboard, copy your **Cloud Name**, **API Key**, and **API Secret**.
 3. Add these credentials to the backend environment variables on Render.
 
-### Gmail SMTP (OTP Verification)
-1. Go to your [Google Account Settings](https://myaccount.google.com).
-2. Under **Security**, enable **2-Step Verification** (required to generate app passwords).
-3. Once enabled, search for **App passwords** or go to Security > 2-Step Verification > App passwords.
-4. Create a new app password: name it something like `Chat App`.
-5. Copy the 16-character password generated (without spaces).
-6. Set `EMAIL_USER` to your full Gmail address and `EMAIL_PASS` to the 16-character password on Render.
+### Brevo Email API Configuration
+1. Sign up/log in to your [Brevo](https://www.brevo.com/) account.
+2. Obtain your SMTP/API Key from the **SMTP & API** section under your account settings.
+3. Ensure your sender email address (default: `roshanshaikh21122006@gmail.com`) is authorized/verified in the Brevo dashboard.
+4. Set the variable `BREVO_API_KEY` in your hosting environment.
